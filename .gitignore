@@ -1,0 +1,12 @@
+*.fastq.gz
+*.bam
+*.bai
+*.g.vcf.gz
+*.g.vcf.gz.tbi
+*.vcf.gz
+*.vcf.gz.tbi
+smoke/
+results/
+out/
+smoke-out/
+.DS_Store
