@@ -1,12 +1,28 @@
-*.fastq.gz
+# macOS system files
+.DS_Store
+._*
+
+# Pipeline run outputs and work directories
+results/
+smoke-out/
+tests/
+smoke/
+
+# Large sequencing, alignment, and intermediate files
 *.bam
 *.bai
-*.g.vcf.gz
-*.g.vcf.gz.tbi
+*.fastq.gz
+*.fq.gz
+*.fa
+*.fa.gz
+*.fasta
+*.fasta.gz
+*.fai
+*.dict
 *.vcf.gz
 *.vcf.gz.tbi
-smoke/
-results/
-out/
-smoke-out/
-.DS_Store
+*.g.vcf.gz
+*.g.vcf.gz.tbi
+
+# Whitelist 
+!smoke-run/cohort.filtered.vcf.gz
