@@ -12,13 +12,13 @@ Initial cohort test runs requested a 1-hour walltime and 12 GB of memory, but ru
 Based on the resource profiling from the test runs:
 
 1. **Walltime Ceiling Adjustment:**
-   - *Measurement:* Single-sample runs took ~12–15 minutes, while the joint genotyping cohort stage ran for ~1 hour 15 minutes.
-   - *Change Made:* Increased `#SBATCH --time` in `02_cohort.sbatch` from `01:00:00` to `02:00:00` to provide an empirical safety buffer and prevent `TIMEOUT` evictions.
+   - Measurement: Single-sample runs took ~12–15 minutes, while the joint genotyping cohort stage ran for ~1 hour 15 minutes.
+   - Change Made: Increased `#SBATCH --time` in `02_cohort.sbatch` from `01:00:00` to `02:00:00` to provide an empirical safety buffer and prevent `TIMEOUT` evictions.
 
 2. **CPU and Thread Allocation:**
-   - *Measurement:* `bwa mem` and `samtools sort` showed near-linear speedup up to 4 cores, with diminishing returns beyond 8 cores on the shared node.
-   - *Change Made:* Set `#SBATCH --cpus-per-task=4` and dynamically bound tool threads via `export THREADS="${SLURM_CPUS_PER_TASK}"`.
+   - Measurement: `bwa mem` and `samtools sort` showed near-linear speedup up to 4 cores, with diminishing returns beyond 8 cores on the shared node.
+   - Change Made: Set `#SBATCH --cpus-per-task=4` and dynamically bound tool threads via `export THREADS="${SLURM_CPUS_PER_TASK}"`.
 
 3. **Scratch Disk Usage:**
-   - *Measurement:* Intermediate sorted BAMs generated 2–4 GB per sample of transient data.
-   - *Change Made:* Set `TMPDIR="/tmp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"` with an automatic exit trap (`trap 'rm -rf "${TMPDIR}"' EXIT`) to keep node scratch clean.
+   - Measurement: Intermediate sorted BAMs generated 2–4 GB per sample of transient data.
+   - Change Made: Set `TMPDIR="/tmp/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"` with an automatic exit trap (`trap 'rm -rf "${TMPDIR}"' EXIT`) to keep node scratch clean.
