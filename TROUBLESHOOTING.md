@@ -105,3 +105,116 @@
             samtools quickcheck "${OUTPUT_BAM}" || { echo "Error: partial or corrupt BAM detected." >&2; rm -f "${OUTPUT_BAM}"; exit 1; }
             ```
         - An artificially truncated BAM caused `samtools quickcheck` to exit with status code `2`, successfully triggering the error handler.
+
+---
+
+---
+
+## Week 3: Containerization & Apptainer Failure Analysis
+
+- ## Failure 1: Build Caching and Stale Package Metadata
+
+    - ### Diagnostics
+        - **Environment:** Container Build Engine (Docker / Podman)
+        - **Commands Executed:**
+            ```bash
+            # Initial base build without version pins:
+            docker build -t test-pkg .
+            # Subsequent rebuild bypassing local build cache:
+            docker build --pull --no-cache -t test-pkg-fresh .
+            # Package state comparison:
+            diff <(docker run --rm test-pkg dpkg -l) <(docker run --rm test-pkg-fresh dpkg -l)
+            ```
+        - **Diagnostic Output:** Diff showed divergence in upstream package releases:
+            ```text
+            < ii  libssl3:amd64   3.0.13-0ubuntu3.4   amd64   Secure Sockets Layer toolkit
+            ---
+            > ii  libssl3:amd64   3.0.13-0ubuntu3.5   amd64   Secure Sockets Layer toolkit
+            ```
+
+    - ### Root Cause
+        Standard builds reuse local cached filesystem layers. When base repository indices (`apt-get update`) update upstream, an un-bypassed cache prevents new packages from being fetched, or partially combines stale package indices with new packages, causing non-deterministic builds and corrupted `dpkg` database states.
+
+    - ### Fix & Verification
+        Pin explicit tool versions in environment configuration files and force explicit cache invalidation when rebuilding containers by supplying `--pull --no-cache` to ensure reproducible builds from clean upstream states.
+
+- ## Failure 2: Missing Host Filesystem Bind Mounts
+
+    - ### Diagnostics
+        - **Pipeline Stage:** Stage 1 (Raw QC) / Stage 3 (Alignment)
+        - **Runtime Engine:** Apptainer
+        - **Exit Code:** `1`
+        - **Log Error Output:**
+            ```text
+            /scratch/tabassum.f/w3-run/work/sample1: No such file or directory
+            WARNING: Skipping user mount /courses: No such file or directory
+            ```
+        - **Command Executed:**
+            ```bash
+            # Removed explicit filesystem mappings from Apptainer invocation:
+            apptainer exec --cleanenv "${SIF}" bash scripts/run_stage.sh
+            ```
+
+    - ### Root Cause
+        Apptainer encapsulates execution inside an isolated container root filesystem. Directories outside standard user boundaries—such as `/courses` (where reference genomes and raw input FASTQs reside) and `/scratch` (where intermediate cluster run files are processed)—are invisible unless explicitly mounted.
+
+    - ### Fix & Verification
+        Supplied explicit runtime bind directives in the Slurm batch submission script:
+        ```bash
+        apptainer exec --cleanenv --bind /courses,/scratch "${SIF}" ...
+        ```
+        With `--bind /courses,/scratch` restored, paths inside the container mapped to the host filesystem and the stage completed with exit code `0:0`.
+
+- ## Failure 3: Thread Allocation to GATK HMM
+
+    - ### Diagnostics
+        - **Pipeline Stage:** Stage 3 (BWA-MEM Alignment) / Stage 5 (GATK HaplotypeCaller)
+        - **Slurm CPUs Requested:** `4`
+        - **Observed Thread Count:** `1`
+        - **Command Executed:**
+            ```bash
+            # Executed container without variable propagation under --cleanenv:
+            apptainer exec --cleanenv --bind /courses,/scratch "${SIF}" ...
+            ```
+        - **Log Error Output / Warning:**
+            ```text
+            [main] CMD: bwa mem -t 1 ...
+            Using 1 thread(s) for PairHMM execution
+            ```
+
+    - ### Root Cause
+        Apptainer's `--cleanenv` security boundary strips host environment variables to isolate execution. Consequently, `SLURM_CPUS_PER_TASK` does not leak into the container environment. Tools relying on thread variables default to a single thread, causing severe runtime bottlenecks and rendering multi-core Slurm allocations idle.
+
+    - ### Fix & Verification
+        Explicitly forwarded the Slurm allocation across the container boundary using `--env THREADS="${SLURM_CPUS_PER_TASK}"` or setting `APPTAINERENV_THREADS="${SLURM_CPUS_PER_TASK}"`. In GATK, passed `--native-pair-hmm-threads "${THREADS}"`. The log confirmed execution scaled across all requested cores:
+        ```text
+        [main] CMD: bwa mem -t 4 ...
+        Using 4 thread(s) for PairHMM execution
+        ```
+
+- ## Failure 4: CPU Architecture Incompatibilities (ARM64 vs AMD64)
+
+    - ### Diagnostics
+        - **Host Node Architecture:** `x86_64` (AMD64)
+        - **Target Image Architecture:** `arm64` (aarch64)
+        - **Exit Code:** `126` / `255`
+        - **Log Error Output:**
+            ```text
+            FATAL:   container creation failed: mount /proc error: ...
+            exec format error: binary cannot be executed
+            ```
+        - **Command Executed:**
+            ```bash
+            apptainer pull --arch arm64 arm.sif docker://ubuntu:24.04
+            apptainer exec arm.sif uname -m
+            ```
+
+    - ### Root Cause
+        Images compiled on Apple Silicon (M-series) Macs default to the `arm64` instruction set architecture. When pulled or run on Explorer's `x86_64` AMD64 compute nodes, the Linux kernel cannot decode or execute the incompatible foreign binary instructions, immediately triggering an `exec format error`.
+
+    - ### Fix & Verification
+        Cross-compiled or forced target architecture compilation during image generation by providing `--platform linux/amd64` to the Docker build command:
+        ```bash
+        docker build --platform linux/amd64 -t fardinatabassum/variant-call:latest .
+        ```
+        Verifying the resulting SIF file on Explorer via `apptainer inspect --labels "${SIF}"` confirmed `org.label-schema.build-arch: amd64`, allowing execution without architectural faults.
