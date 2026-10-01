@@ -32,4 +32,3 @@ slurm/logs/
 !smoke-run/cohort.filtered.vcf.gz
 !cluster-run/cohort.filtered.vcf.gz
 
-

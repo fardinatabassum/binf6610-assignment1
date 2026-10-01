@@ -4,8 +4,8 @@
 #SBATCH --partition=courses
 #SBATCH --account=binf6610.202710
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=12G
-#SBATCH --time=01:00:00
+#SBATCH --mem=16G
+#SBATCH --time=02:00:00
 #SBATCH --output=logs/cohort_%j.out
 
 set -euo pipefail
