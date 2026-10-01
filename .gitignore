@@ -5,8 +5,12 @@
 # Pipeline run outputs and work directories
 results/
 smoke-out/
-tests/
 smoke/
+
+# Slurm logs
+slurm/logs/
+*.out
+*.err
 
 # Large sequencing, alignment, and intermediate files
 *.bam
@@ -26,3 +30,6 @@ smoke/
 
 # Whitelist 
 !smoke-run/cohort.filtered.vcf.gz
+!cluster-run/cohort.filtered.vcf.gz
+
+
