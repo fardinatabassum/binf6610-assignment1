@@ -22,9 +22,10 @@ trap 'rm -rf "${TMPDIR}"' EXIT
 # Propagate core allocation to child tools
 export THREADS="${SLURM_CPUS_PER_TASK}"
 
-# Activate cluster environment
-module load miniconda3/25.9.1
-source activate "${CONDA_ENV}"
-
-# Run cohort stages 6-9
-bash "${PIPELINE_DIR}/run_pipeline.sh" "${SAMPLESHEET}" "${RUN_ROOT}" publish
+# Run cohort stages 6-9 inside Apptainer
+apptainer exec --cleanenv \
+    --bind /courses,/scratch \
+    --env THREADS="${SLURM_CPUS_PER_TASK}" \
+    --env TMPDIR="${TMPDIR}" \
+    "${SIF}" \
+    bash "${PIPELINE_DIR}/run_pipeline.sh" "${SAMPLESHEET}" "${RUN_ROOT}" publish

@@ -23,15 +23,16 @@ trap 'rm -rf "${TMPDIR}"' EXIT
 # Propagate core allocation to child tools
 export THREADS="${SLURM_CPUS_PER_TASK}"
 
-# Activate cluster environment
-module load miniconda3/25.9.1
-source activate "${CONDA_ENV}"
-
 # Extract sample ID from CSV row (skip header)
 SAMPLE=$(awk -F, -v n="${SLURM_ARRAY_TASK_ID}" 'NR==n+1 { print $1 }' "${SAMPLESHEET}")
 
 # Guard against out-of-range array indices
 [[ -n "${SAMPLE}" ]] || { echo "task ${SLURM_ARRAY_TASK_ID}: no such row in ${SAMPLESHEET}" >&2; exit 64; }
 
-# Execute stages 0-5 for this sample
-bash "${PIPELINE_DIR}/run_sample.sh" "${SAMPLESHEET}" "${RUN_ROOT}" "${SAMPLE}"
+# Execute stages 0-5 for this sample inside Apptainer
+apptainer exec --cleanenv \
+    --bind /courses,/scratch \
+    --env THREADS="${SLURM_CPUS_PER_TASK}" \
+    --env TMPDIR="${TMPDIR}" \
+    "${SIF}" \
+    bash "${PIPELINE_DIR}/run_sample.sh" "${SAMPLESHEET}" "${RUN_ROOT}" "${SAMPLE}"
